@@ -33,7 +33,7 @@
     "publicIPAddressType": "Dynamic",
     "vhdStorageContainerName": "vhds",
     "vmSize": "Standard_D1",
-    "scriptURIs": "https://raw.githubusercontent.com/Manesh-R/Sandbox/master/trainer-postprep.sh",
+    "scriptURIs": "https://raw.githubusercontent.com/SpektraSystems/orchestration-workshop/master/prepare-azure/scripts/trainer-postprep.sh",
     "scriptToExecute": "./trainer-postprep.sh",
     "vnetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('virtualNetworkName'))]",
     "subnetRef": "[concat(variables('vnetId'), '/subnets/', variables('subnetName'))]",
