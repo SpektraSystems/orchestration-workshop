@@ -10,6 +10,9 @@ DEPENDENCIES="
     "
 
 ENVVARS="
+    TRAINEE_COUNT
+    CLUSTER_SIZE
+    AZURE_LOCATION
     "
 
 check_envvars() {

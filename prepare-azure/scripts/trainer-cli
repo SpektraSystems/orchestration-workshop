@@ -32,6 +32,24 @@ deploy_hq(){
     ssh -A $REMOTE_USER@$REMOTE_HOST 
 }
 
+create_vms() {
+    mkdir -p temp
+    for ((i = 1; i <= $TRAINEE_COUNT; i++))
+    do
+        touch temp/trainee-$i.json 
+        cat scripts/trainee-vms.parameters.json >> temp/trainee-$i.json
+       
+        exists=$(az resource group list --query "[?name=='docker-trainee-$i']" --output table | wc -l)
+        if [ $exists == 0 ]; then
+            echo "Creating resource group docker-trainee-$i"
+            az resource group create -l $AZURE_LOCATION -n docker-trainee-$i
+        fi
+
+        ts=$(date +"%Y%m%d%H%M%S%3N")
+        az resource group deployment create --template-file scripts/trainee-vms.json --parameters "{\"vmsPerTrainee\": {\"value\": $CLUSTER_SIZE }}" -g docker-trainee-$i --name docker-trainee-$i-$ts
+    done
+}
+
 deploy_tag(){
     TAG=$1
     SETTINGS=$2
@@ -283,6 +301,9 @@ run_cli() {
         TAG=$2
         need_tag $TAG
         make_cards $TAG $3
+        ;;
+    create)
+        create_vms
         ;;
     deploy)
         TAG=$2
