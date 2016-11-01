@@ -3,41 +3,13 @@
 
 set -e  # if we encounter an error, abort
 
-export AWS_DEFAULT_OUTPUT=text
-
 greet() {
-    hello=$(aws iam get-user --query 'User.UserName')
-    echo "Greetings, $hello/${USER}!"
-}
-
-deploy_hq(){
-    TAG=$1
-    need_tag $TAG
-    REMOTE_USER=ubuntu
-    REMOTE_HOST=$(aws_get_instance_ips_by_tag $TAG)
-    echo "Trying to reach $TAG instances..."
-    while ! tag_is_reachable $TAG; do
-        echo -n "."
-        sleep 2
-    done
-    env | grep -i aws > envvars.sh
-    scp \
-        -o "UserKnownHostsFile /dev/null" \
-        -o "StrictHostKeyChecking=no" \
-        scripts/remote-execution.sh \
-        envvars.sh \
-        $REMOTE_USER@$REMOTE_HOST:/tmp/
-
-    ssh -A $REMOTE_USER@$REMOTE_HOST "bash /tmp/remote-execution.sh >>/tmp/pre.out 2>>/tmp/pre.err"
-    ssh -A $REMOTE_USER@$REMOTE_HOST 
+    az account list --output table
 }
 
 create_vms() {
-    mkdir -p temp
     for ((i = 1; i <= $TRAINEE_COUNT; i++))
     do
-        touch temp/trainee-$i.json 
-        cat scripts/trainee-vms.parameters.json >> temp/trainee-$i.json
        
         exists=$(az resource group list --query "[?name=='docker-trainee-$i']" --output table | wc -l)
         if [ $exists == 0 ]; then
@@ -45,93 +17,12 @@ create_vms() {
             az resource group create -l $AZURE_LOCATION -n docker-trainee-$i
         fi
 
+        echo "Deploying virtual machine instances for trainee $i"
         ts=$(date +"%Y%m%d%H%M%S%3N")
         az resource group deployment create --template-file scripts/trainee-vms.json --parameters "{\"vmsPerTrainee\": {\"value\": $CLUSTER_SIZE }}" -g docker-trainee-$i --name docker-trainee-$i-$ts
     done
 }
 
-deploy_tag(){
-    TAG=$1
-    SETTINGS=$2
-    need_tag $TAG
-    link_tag $TAG
-
-
-    count=$(wc -l ips.txt)
-
-    # wait until all hosts are reachable before trying to deploy
-    echo "Trying to reach $TAG instances..."
-    while ! tag_is_reachable $TAG; do
-        echo -n "."
-        sleep 2
-    done
-
-    echo "[[ Deploying tag $TAG ]]"
-    export SETTINGS
-    source scripts/postprep.rc
-    echo "Finished deploying $TAG."
-    echo "You may want to run one of the following commands:"
-    echo "./trainer pull-images $TAG"
-    echo "./trainer cards $TAG <settings/somefile.yaml>"
-}
-
-link_tag() {
-    TAG=$1
-    need_tag $TAG
-    IPS_FILE=tags/$TAG/ips.txt
-    need_ips_file $IPS_FILE
-    ln -sf $IPS_FILE ips.txt
-}
-
-pull_tag(){
-    TAG=$1
-    need_tag $TAG
-    link_tag $TAG
-    if [ ! -s $IPS_FILE ]; then
-        echo "Nonexistent or empty IPs file $IPS_FILE"
-    fi
-
-    # Pre-pull a bunch of images
-    pssh --timeout 900 'for I in \
-            debian:latest \
-            ubuntu:latest \
-            fedora:latest \
-            centos:latest \
-            postgres \
-            redis \
-            training/namer \
-            nathanleclaire/redisonrails; do
-        sudo -u docker docker pull $I
-    done'
-
-    echo "Finished pulling images for $TAG"
-
-    echo "You may now want to run:"
-    echo "./trainer cards $TAG <settings/somefile.yaml>"
-}
-
-wait_until_tag_is_running() {
-    max_retry=50
-    TAG=$1
-    COUNT=$2
-    i=0
-    done_count=0
-    while [[ $done_count -lt $COUNT ]]; do \
-        let "i += 1"
-        echo "Waiting: $done_count/$COUNT instances online"
-        done_count=$(aws ec2 describe-instances \
-                --filters "Name=instance-state-name,Values=running" \
-                          "Name=tag:Name,Values=$TAG" \
-                --query "Reservations[*].Instances[*].State.Name" \
-            | tr "\t" "\n" \
-            | wc -l)
-
-        if [[ $i -gt $max_retry ]]; then
-            die "Timed out while waiting for instance creation (after $max_retry retries)"
-        fi
-        sleep 1
-    done
-}
 
 tag_is_reachable() {
     TAG=$1
